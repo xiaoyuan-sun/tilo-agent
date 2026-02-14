@@ -1,0 +1,13 @@
+[project]
+name = "tilo-agent"
+version = "0.1.0"
+description = "Minimal AgentScope-based framework with extensible skills and tools."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "agentscope",
+    "python-dotenv"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/agentscope-ai/agentscope"
