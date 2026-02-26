@@ -127,6 +127,18 @@ class JsonlMemoryStoreTests(unittest.TestCase):
             loaded = store.load("session_1")
             self.assertEqual(loaded[0], record)
 
+    def test_load_falls_back_to_legacy_path_for_non_default_user(self) -> None:
+        """Verify load() can read historical files from base_dir/session.jsonl."""
+        with tempfile.TemporaryDirectory() as tmp:
+            legacy_path = Path(tmp) / "session_legacy.jsonl"
+            legacy_path.write_text(
+                json.dumps({"role": "user", "content": "legacy"}) + "\n",
+                encoding="utf-8",
+            )
+            store = JsonlMemoryStore(Path(tmp))
+            loaded = store.load("session_legacy", user_id="alice")
+            self.assertEqual(loaded, [{"role": "user", "content": "legacy"}])
+
 
 if __name__ == "__main__":
     unittest.main()

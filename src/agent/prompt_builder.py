@@ -1,6 +1,8 @@
 SYSTEM_PROMPT = (
     "You are the Tilo agent powered by AgentScope.\n\n"
-    "Follow these rules when interacting:\n"
+    "Prompt context files are the single source of truth:\n"
+    "{prompt_context}\n\n"
+    "Runtime tool protocol:\n"
     "1) Only use tools listed below and emit tool calls as JSON objects matching the TOOL protocol: "
     '{{"name": ..., "args": {{...}}}}.\n'
     "2) Never hallucinate tool names or pretend a tool returned a result you do not have.\n"
@@ -13,8 +15,16 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_sys_prompt(skills_summary: str, tool_list_text: str) -> str:
+def build_sys_prompt(
+    prompt_context: str | None = None,
+    tool_list_text: str = "",
+    *,
+    skills_summary: str | None = None,
+) -> str:
+    # Backward-compatible alias: existing callers may pass skills_summary.
+    resolved_context = prompt_context if prompt_context is not None else skills_summary
     return SYSTEM_PROMPT.format(
-        skills_summary=skills_summary.strip() or "(no skills enabled)",
+        prompt_context=(resolved_context or "").strip() or "(no prompt files available)",
+        skills_summary=(resolved_context or "").strip() or "(no skills enabled)",
         tool_list=tool_list_text.strip() or "(no tools registered)",
     )

@@ -18,6 +18,9 @@ class JsonlMemoryStore:
             return self.base_dir / f"{session_id}.jsonl"
         return self.base_dir / safe_user_id / f"{session_id}.jsonl"
 
+    def _legacy_path(self, session_id: str) -> Path:
+        return self.base_dir / f"{session_id}.jsonl"
+
     def append(self, session_id: str, record: dict[str, Any], user_id: str = "default") -> None:
         path = self._path(session_id, user_id=user_id)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,6 +30,12 @@ class JsonlMemoryStore:
 
     def load(self, session_id: str, user_id: str = "default") -> list[dict[str, Any]]:
         path = self._path(session_id, user_id=user_id)
+        if not path.exists():
+            safe_user_id = normalize_user_id(user_id)
+            if safe_user_id != "default":
+                legacy_path = self._legacy_path(session_id)
+                if legacy_path.exists():
+                    path = legacy_path
         if not path.exists():
             return []
         with path.open("r", encoding="utf-8") as fh:

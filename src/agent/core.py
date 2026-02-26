@@ -13,6 +13,7 @@ from agentscope.memory import InMemoryMemory
 from agentscope.tool import ToolResponse, Toolkit, view_text_file, write_text_file
 
 from agent.prompt_builder import build_sys_prompt
+from agent.prompt_files import compose_prompt_context
 from llm.client import build_model_from_env
 from memory.jsonl_store import JsonlMemoryStore
 from runtime.file_access import ensure_writable, resolve_project_path
@@ -124,17 +125,14 @@ def _normalize_response_text(content: Any) -> str:
 
 
 async def run_once(user_text: str, ctx: SessionContext) -> str:
-    summary_text, skill_dirs = load_enabled_skills(ctx.enabled_skills)
+    _, skill_dirs = load_enabled_skills(ctx.enabled_skills)
     toolkit = Toolkit()
     tool_lines = _enable_builtin_file_tools(toolkit, ctx.project_root)
     for skill_dir in skill_dirs:
         toolkit.register_agent_skill(str(skill_dir))
-    ctx.workspace_dir()
     tool_lines.append("(plus tool functions provided by registered AgentScope skills)")
-    sys_prompt = build_sys_prompt(
-        summary_text,
-        "\n".join(tool_lines),
-    )
+    prompt_context = compose_prompt_context(ctx.workspace_dir())
+    sys_prompt = build_sys_prompt(prompt_context, "\n".join(tool_lines))
     memory_store = JsonlMemoryStore(ctx.memory_dir)
     history = memory_store.load(ctx.session_id, user_id=ctx.user_id)
     memory = InMemoryMemory()
