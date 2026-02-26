@@ -5,7 +5,7 @@ import re
 from typing import Any, Mapping, Protocol, Sequence
 from uuid import uuid4
 
-from agentscope.message.block import ToolUseBlock, TextBlock
+from agentscope.message import ToolUseBlock, TextBlock
 
 
 PromptBlock = Mapping[str, Any]
