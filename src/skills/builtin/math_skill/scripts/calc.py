@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import ast
+import json
 from typing import Any
-
-from tools.base import Tool
 
 
 _ALLOWED_NODES = {
@@ -62,7 +62,7 @@ class _SafeEvaluator(ast.NodeVisitor):
         return node.value
 
 
-def _calculate(expression: str) -> dict[str, Any]:
+def evaluate(expression: str) -> dict[str, Any]:
     try:
         tree = ast.parse(expression, mode="eval")
         evaluator = _SafeEvaluator()
@@ -72,11 +72,8 @@ def _calculate(expression: str) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
-math_tool = Tool(
-    name="math.calc",
-    description="Safely evaluate simple math expressions.",
-    args_schema={"expression": "string"},
-    func=_calculate,
-)
-
-TOOLS = [math_tool]
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--expression", required=True, help="Math expression to evaluate")
+    args = parser.parse_args()
+    print(json.dumps(evaluate(args.expression), ensure_ascii=True))
