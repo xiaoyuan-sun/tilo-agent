@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from agentscope.agent import ReActAgent
+from agentscope.formatter import OpenAIChatFormatter
 from agentscope.message import Msg
 from agentscope.memory import InMemoryMemory
 from agentscope.tool import Toolkit
@@ -143,6 +145,49 @@ def _enable_builtin_file_tools(toolkit: Toolkit, project_root: Path) -> None:
     )
 
 
+async def _append_memory_entry(memory: object, entry: Any) -> None:
+    if hasattr(memory, "append"):
+        result = getattr(memory, "append")(entry)
+        if inspect.isawaitable(result):
+            await result
+        return
+    if hasattr(memory, "add"):
+        result = getattr(memory, "add")(entry)
+        if inspect.isawaitable(result):
+            await result
+        return
+    raise AttributeError("Memory object must provide append() or add().")
+
+
+def _history_entry_to_msg(entry: Msg | Mapping[str, Any]) -> Msg:
+    if isinstance(entry, Msg):
+        return entry
+    role = str(entry.get("role") or "assistant")
+    name = str(entry.get("name") or role)
+    content = entry.get("content", "")
+    return Msg(name=name, role=role, content=content)
+
+
+def _normalize_response_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, Mapping):
+        text = content.get("text")
+        return str(text) if text is not None else json.dumps(content, ensure_ascii=False)
+    if isinstance(content, list):
+        texts = [
+            str(block.get("text"))
+            for block in content
+            if isinstance(block, Mapping) and block.get("text") is not None
+        ]
+        if texts:
+            return "\n".join(texts)
+        return json.dumps(content, ensure_ascii=False)
+    if content is None:
+        return ""
+    return str(content)
+
+
 async def run_once(user_text: str, ctx: SessionContext) -> str:
     summary_text, skill_dirs = load_enabled_skills(ctx.enabled_skills)
     toolkit = Toolkit()
@@ -157,18 +202,20 @@ async def run_once(user_text: str, ctx: SessionContext) -> str:
     history = memory_store.load(ctx.session_id)
     memory = InMemoryMemory()
     for entry in history:
-        memory.append(entry)
+        await _append_memory_entry(memory, _history_entry_to_msg(entry))
     model = build_model_from_env()
     agent = ReActAgent(
         name="Tilo",
         sys_prompt=sys_prompt,
         model=model,
+        formatter=OpenAIChatFormatter(),
         toolkit=toolkit,
         memory=memory,
         max_iters=ctx.max_iters,
     )
     user_msg = Msg(name="user", content=user_text, role="user")
-    response = await agent.run(user_msg)
+    response = await agent(user_msg)
+    assistant_text = _normalize_response_text(response.content)
     memory_store.append(ctx.session_id, {"role": "user", "content": user_text})
-    memory_store.append(ctx.session_id, {"role": "assistant", "content": response.content})
-    return response.content
+    memory_store.append(ctx.session_id, {"role": "assistant", "content": assistant_text})
+    return assistant_text
