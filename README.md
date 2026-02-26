@@ -15,10 +15,12 @@ from agent.core import run_once
 
 ctx = SessionContext(
     session_id="demo",
-    enabled_skills=["time_skill", "math_skill"],
 )
 print(asyncio.run(run_once("现在几点？", ctx)))
 ```
+
+By default, when `enabled_skills` is not provided, all built-in skills under `src/skills/builtin/` are loaded.  
+Set `enabled_skills=[...]` only when you want to limit the available skills.
 
 ## Running
 1. Install dependencies: `pip install .` (or `PYTHONPATH=src python script.py` for quick experimentation without installing).

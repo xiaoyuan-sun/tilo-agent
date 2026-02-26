@@ -40,6 +40,39 @@ Use for demo only.
             self.assertEqual(skill_dirs, [skill_dir])
             self.assertTrue(all(isinstance(p, Path) for p in skill_dirs))
 
+    def test_load_enabled_skills_defaults_to_all_skills_when_unspecified(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            first = base / "first_skill"
+            second = base / "second_skill"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            (first / "SKILL.md").write_text(
+                """---
+name: first_skill
+description: First skill.
+---""",
+                encoding="utf-8",
+            )
+            (second / "SKILL.md").write_text(
+                """---
+name: second_skill
+description: Second skill.
+---""",
+                encoding="utf-8",
+            )
+
+            original = loader.SKILLS_DIR
+            loader.SKILLS_DIR = base
+            try:
+                summary, skill_dirs = loader.load_enabled_skills()
+            finally:
+                loader.SKILLS_DIR = original
+
+            self.assertIn("first_skill", summary)
+            self.assertIn("second_skill", summary)
+            self.assertEqual(skill_dirs, [first, second])
+
 
 if __name__ == "__main__":
     unittest.main()

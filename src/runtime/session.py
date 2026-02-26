@@ -12,7 +12,7 @@ def new_session_id() -> str:
 @dataclass
 class SessionContext:
     session_id: str
-    enabled_skills: list[str]
+    enabled_skills: list[str] | None = None
     timezone: str = "Asia/Seoul"
     memory_dir: Path = Path("./data")
     max_iters: int = 6
