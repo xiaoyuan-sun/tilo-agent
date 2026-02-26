@@ -129,13 +129,14 @@ async def run_once(user_text: str, ctx: SessionContext) -> str:
     tool_lines = _enable_builtin_file_tools(toolkit, ctx.project_root)
     for skill_dir in skill_dirs:
         toolkit.register_agent_skill(str(skill_dir))
+    ctx.workspace_dir()
     tool_lines.append("(plus tool functions provided by registered AgentScope skills)")
     sys_prompt = build_sys_prompt(
         summary_text,
         "\n".join(tool_lines),
     )
     memory_store = JsonlMemoryStore(ctx.memory_dir)
-    history = memory_store.load(ctx.session_id)
+    history = memory_store.load(ctx.session_id, user_id=ctx.user_id)
     memory = InMemoryMemory()
     for entry in history:
         await _append_memory_entry(memory, _history_entry_to_msg(entry))
@@ -152,6 +153,10 @@ async def run_once(user_text: str, ctx: SessionContext) -> str:
     user_msg = Msg(name="user", content=user_text, role="user")
     response = await agent(user_msg)
     assistant_text = _normalize_response_text(response.content)
-    memory_store.append(ctx.session_id, {"role": "user", "content": user_text})
-    memory_store.append(ctx.session_id, {"role": "assistant", "content": assistant_text})
+    memory_store.append(ctx.session_id, {"role": "user", "content": user_text}, user_id=ctx.user_id)
+    memory_store.append(
+        ctx.session_id,
+        {"role": "assistant", "content": assistant_text},
+        user_id=ctx.user_id,
+    )
     return assistant_text

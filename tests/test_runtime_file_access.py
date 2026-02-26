@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from runtime.file_access import ensure_writable, resolve_project_path
+from runtime.file_access import ensure_writable, resolve_project_path, resolve_user_workspace
 
 
 class RuntimeFileAccessTests(unittest.TestCase):
@@ -36,6 +36,17 @@ class RuntimeFileAccessTests(unittest.TestCase):
             target = Path(tmp) / "a.txt"
             target.write_text("x", encoding="utf-8")
             ensure_writable(target, overwrite=True)
+
+    def test_resolve_user_workspace_builds_isolated_path_per_user(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "workspaces"
+            alice = resolve_user_workspace(base, "alice")
+            bob = resolve_user_workspace(base, "bob")
+            self.assertEqual(alice, (base / "alice").resolve())
+            self.assertEqual(bob, (base / "bob").resolve())
+            self.assertNotEqual(alice, bob)
+            self.assertTrue(alice.exists())
+            self.assertTrue(bob.exists())
 
 
 if __name__ == "__main__":
