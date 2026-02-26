@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import inspect
 import json
 from pathlib import Path
@@ -10,7 +9,7 @@ from agentscope.agent import ReActAgent
 from agentscope.formatter import OpenAIChatFormatter
 from agentscope.message import Msg
 from agentscope.memory import InMemoryMemory
-from agentscope.tool import Toolkit
+from agentscope.tool import ToolResponse, Toolkit, view_text_file, write_text_file
 
 from agent.prompt_builder import build_sys_prompt
 from llm.client import build_model_from_env
@@ -20,60 +19,12 @@ from runtime.session import SessionContext
 from skills.loader import load_enabled_skills
 
 
-def _load_builtin_file_tools() -> tuple[Callable[..., Any], Callable[..., Any]]:
-    # Keep import strategy tolerant across AgentScope versions.
-    candidates = [
-        ("agentscope.tool", "view_text_file"),
-        ("agentscope.tool.builtin", "view_text_file"),
-        ("agentscope.tool.builtin.file_tools", "view_text_file"),
-    ]
-    view_tool = _load_first_attr(candidates)
-
-    candidates = [
-        ("agentscope.tool", "write_text_file"),
-        ("agentscope.tool.builtin", "write_text_file"),
-        ("agentscope.tool.builtin.file_tools", "write_text_file"),
-    ]
-    write_tool = _load_first_attr(candidates)
-    return view_tool, write_tool
-
-
-def _load_first_attr(candidates: list[tuple[str, str]]) -> Callable[..., Any]:
-    for module_name, attr_name in candidates:
-        try:
-            module = importlib.import_module(module_name)
-        except Exception:
-            continue
-        value = getattr(module, attr_name, None)
-        if callable(value):
-            return value
-    details = ", ".join(f"{mod}.{attr}" for mod, attr in candidates)
-    raise RuntimeError(f"Unable to locate AgentScope builtin tool. Checked: {details}")
-
-
-def _register_tool_callable(toolkit: Toolkit, fn: Callable[..., Any]) -> None:
-    for method_name in ("register_tool", "register_function", "add_tool"):
-        method = getattr(toolkit, method_name, None)
-        if method is None:
-            continue
-        try:
-            method(fn)
-            return
-        except TypeError:
-            try:
-                method(fn.__name__, fn)
-                return
-            except TypeError:
-                continue
-    raise RuntimeError("Toolkit does not expose a supported function registration method.")
-
-
 def _wrap_project_scoped_file_tool(
     fn: Callable[..., Any],
     project_root: Path,
     *,
     is_write_tool: bool,
-) -> Callable[..., Any]:
+) -> Callable[..., ToolResponse | Any]:
     signature = inspect.signature(fn)
     accepts_kwargs = any(
         parameter.kind == inspect.Parameter.VAR_KEYWORD
@@ -134,15 +85,14 @@ def _wrap_project_scoped_file_tool(
 
 
 def _enable_builtin_file_tools(toolkit: Toolkit, project_root: Path) -> None:
-    view_tool, write_tool = _load_builtin_file_tools()
-    _register_tool_callable(
-        toolkit,
-        _wrap_project_scoped_file_tool(view_tool, project_root.resolve(), is_write_tool=False),
+    wrapped_view = _wrap_project_scoped_file_tool(
+        view_text_file, project_root.resolve(), is_write_tool=False
     )
-    _register_tool_callable(
-        toolkit,
-        _wrap_project_scoped_file_tool(write_tool, project_root.resolve(), is_write_tool=True),
+    wrapped_write = _wrap_project_scoped_file_tool(
+        write_text_file, project_root.resolve(), is_write_tool=True
     )
+    toolkit.register_tool_function(wrapped_view)
+    toolkit.register_tool_function(wrapped_write)
 
 
 async def _append_memory_entry(memory: object, entry: Any) -> None:
