@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import inspect
+
 from agentscope.agent import ReActAgent
+from agentscope.formatter import OpenAIChatFormatter
 from agentscope.message import Msg
 from agentscope.memory import InMemoryMemory
 from agentscope.tool import Toolkit
@@ -10,6 +13,20 @@ from llm.client import build_model_from_env
 from memory.jsonl_store import JsonlMemoryStore
 from runtime.session import SessionContext
 from skills.loader import load_enabled_skills
+
+
+async def _append_memory_entry(memory: object, entry: dict[str, str]) -> None:
+    if hasattr(memory, "append"):
+        result = getattr(memory, "append")(entry)
+        if inspect.isawaitable(result):
+            await result
+        return
+    if hasattr(memory, "add"):
+        result = getattr(memory, "add")(entry)
+        if inspect.isawaitable(result):
+            await result
+        return
+    raise AttributeError("Memory object must provide append() or add().")
 
 
 async def run_once(user_text: str, ctx: SessionContext) -> str:
@@ -22,18 +39,19 @@ async def run_once(user_text: str, ctx: SessionContext) -> str:
     history = memory_store.load(ctx.session_id)
     memory = InMemoryMemory()
     for entry in history:
-        memory.append(entry)
+        await _append_memory_entry(memory, entry)
     model = build_model_from_env()
     agent = ReActAgent(
         name="Tilo",
         sys_prompt=sys_prompt,
         model=model,
+        formatter=OpenAIChatFormatter(),
         toolkit=toolkit,
         memory=memory,
         max_iters=ctx.max_iters,
     )
     user_msg = Msg(name="user", content=user_text, role="user")
-    response = await agent.run(user_msg)
+    response = await agent(user_msg)
     memory_store.append(ctx.session_id, {"role": "user", "content": user_text})
     memory_store.append(ctx.session_id, {"role": "assistant", "content": response.content})
     return response.content
