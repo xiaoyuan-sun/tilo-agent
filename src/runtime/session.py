@@ -16,3 +16,4 @@ class SessionContext:
     timezone: str = "Asia/Seoul"
     memory_dir: Path = Path("./data")
     max_iters: int = 6
+    project_root: Path = Path.cwd().resolve()
