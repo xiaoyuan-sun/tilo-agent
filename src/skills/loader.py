@@ -62,8 +62,8 @@ def _extract_section(doc: str, title: str) -> str:
     return section.strip()
 
 
-def load_enabled_skills(enabled: Iterable[str]) -> Tuple[str, List[Path]]:
-    enabled = list(enabled)
+def load_enabled_skills(enabled: Iterable[str] | None = None) -> Tuple[str, List[Path]]:
+    enabled = scan_builtin_skills() if enabled is None else list(enabled)
     summaries: List[str] = []
     skill_dirs: List[Path] = []
     for skill_name in enabled:

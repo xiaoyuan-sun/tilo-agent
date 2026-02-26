@@ -9,12 +9,22 @@ SYSTEM_PROMPT = (
     "3) Keep chain-of-thought internal; the assistant response should be concise and not expose reasoning steps.\n"
     "4) When producing the final answer, do so only after you have collected any required tool output.\n"
     "\n"
+    "SKILLS SUMMARY:\n{skills_summary}\n"
+    "\n"
     "AVAILABLE TOOLS:\n{tool_list}\n"
 )
 
 
-def build_sys_prompt(prompt_context: str, tool_list_text: str) -> str:
+def build_sys_prompt(
+    prompt_context: str | None = None,
+    tool_list_text: str = "",
+    *,
+    skills_summary: str | None = None,
+) -> str:
+    # Backward-compatible alias: existing callers may pass skills_summary.
+    resolved_context = prompt_context if prompt_context is not None else skills_summary
     return SYSTEM_PROMPT.format(
-        prompt_context=prompt_context.strip() or "(no prompt files available)",
+        prompt_context=(resolved_context or "").strip() or "(no prompt files available)",
+        skills_summary=(resolved_context or "").strip() or "(no skills enabled)",
         tool_list=tool_list_text.strip() or "(no tools registered)",
     )
