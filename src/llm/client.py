@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence, TypeAlias
 from uuid import uuid4
 
-from agentscope.message.block import ToolUseBlock, TextBlock
+from agentscope.model import OpenAIChatModel
+from dotenv import load_dotenv
+
+try:
+    from agentscope.message.block import ToolUseBlock, TextBlock
+except ModuleNotFoundError:
+    ToolUseBlock: TypeAlias = dict[str, Any]
+    TextBlock: TypeAlias = dict[str, Any]
 
 
 PromptBlock = Mapping[str, Any]
@@ -73,8 +80,21 @@ class MockModel:
 
 
 def build_model_from_env() -> BaseModel:
-    model_name = os.environ.get("AGENTSCOPE_MODEL")
-    if model_name:
-        # TODO: instantiate real AgentScope provider (OpenAI, DashScope, etc.) based on AGENTSCOPE_MODEL
-        raise NotImplementedError("AGENTSCOPE_MODEL support must be implemented")
-    return MockModel()
+    load_dotenv(override=False)
+    provider = os.environ.get("AGENTSCOPE_MODEL", "").strip().lower()
+    if not provider:
+        return MockModel()
+    model_name = os.environ.get("AGENTSCOPE_MODEL_NAME", "").strip()
+    if not model_name:
+        raise ValueError("AGENTSCOPE_MODEL_NAME is required when AGENTSCOPE_MODEL is set.")
+    if provider == "openai":
+        api_key = os.environ.get("AGENTSCOPE_API_KEY")
+        base_url = os.environ.get("AGENTSCOPE_BASE_URL", "").strip()
+        client_kwargs = {"base_url": base_url} if base_url else None
+        return OpenAIChatModel(
+            model_name=model_name,
+            api_key=api_key,
+            stream=False,
+            client_kwargs=client_kwargs,
+        )
+    raise ValueError(f"Unsupported AGENTSCOPE_MODEL provider: {provider}")

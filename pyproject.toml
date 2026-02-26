@@ -11,3 +11,6 @@ dependencies = [
 
 [project.urls]
 "Homepage" = "https://github.com/agentscope-ai/agentscope"
+
+[project.scripts]
+tilo-chat = "runtime.cli:main"

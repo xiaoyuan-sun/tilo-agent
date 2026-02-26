@@ -23,7 +23,6 @@ def resolve_user_workspace(workspace_base_dir: Path, user_id: str) -> Path:
     workspace_dir.mkdir(parents=True, exist_ok=True)
     return workspace_dir
 
-
 def resolve_project_path(project_root: Path, requested_path: str) -> Path:
     raw = (requested_path or "").strip()
     if not raw:

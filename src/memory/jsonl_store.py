@@ -14,6 +14,8 @@ class JsonlMemoryStore:
 
     def _path(self, session_id: str, user_id: str = "default") -> Path:
         safe_user_id = normalize_user_id(user_id)
+        if safe_user_id == "default":
+            return self.base_dir / f"{session_id}.jsonl"
         return self.base_dir / safe_user_id / f"{session_id}.jsonl"
 
     def append(self, session_id: str, record: dict[str, Any], user_id: str = "default") -> None:
