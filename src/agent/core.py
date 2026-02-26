@@ -47,6 +47,10 @@ def _with_project_path_sandbox(
     return wrapped
 
 
+def _tool_signature_text(fn: Callable[..., Any]) -> str:
+    return f"{fn.__name__}{inspect.signature(fn)}"
+
+
 def _coerce_overwrite(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -63,7 +67,7 @@ def _coerce_overwrite(value: Any) -> bool:
         return bool(value)
     raise ValueError("overwrite must be a boolean value.")
 
-def _enable_builtin_file_tools(toolkit: Toolkit, project_root: Path) -> None:
+def _enable_builtin_file_tools(toolkit: Toolkit, project_root: Path) -> list[str]:
     scoped_root = project_root.resolve()
     wrapped_view = _with_project_path_sandbox(
         view_text_file, scoped_root, is_write_tool=False
@@ -73,6 +77,7 @@ def _enable_builtin_file_tools(toolkit: Toolkit, project_root: Path) -> None:
     )
     toolkit.register_tool_function(wrapped_view)
     toolkit.register_tool_function(wrapped_write)
+    return [_tool_signature_text(wrapped_view), _tool_signature_text(wrapped_write)]
 
 
 async def _append_memory_entry(memory: object, entry: Any) -> None:
@@ -121,12 +126,13 @@ def _normalize_response_text(content: Any) -> str:
 async def run_once(user_text: str, ctx: SessionContext) -> str:
     summary_text, skill_dirs = load_enabled_skills(ctx.enabled_skills)
     toolkit = Toolkit()
-    _enable_builtin_file_tools(toolkit, ctx.project_root)
+    tool_lines = _enable_builtin_file_tools(toolkit, ctx.project_root)
     for skill_dir in skill_dirs:
         toolkit.register_agent_skill(str(skill_dir))
+    tool_lines.append("(plus tool functions provided by registered AgentScope skills)")
     sys_prompt = build_sys_prompt(
         summary_text,
-        "view_text_file(path)\nwrite_text_file(path, content, overwrite=false)",
+        "\n".join(tool_lines),
     )
     memory_store = JsonlMemoryStore(ctx.memory_dir)
     history = memory_store.load(ctx.session_id)
