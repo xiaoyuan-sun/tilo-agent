@@ -80,7 +80,7 @@ class MockModel:
 
 
 def build_model_from_env() -> BaseModel:
-    load_dotenv()
+    load_dotenv(override=False)
     provider = os.environ.get("AGENTSCOPE_MODEL", "").strip().lower()
     if not provider:
         return MockModel()

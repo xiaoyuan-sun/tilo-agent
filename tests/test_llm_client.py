@@ -14,10 +14,11 @@ from llm.client import MockModel, build_model_from_env
 
 class LlmClientTests(unittest.TestCase):
     def test_build_model_from_env_returns_mock_when_provider_missing(self) -> None:
-        with patch("llm.client.load_dotenv"):
+        with patch("llm.client.load_dotenv") as mock_load_dotenv:
             with patch.dict(os.environ, {}, clear=True):
                 model = build_model_from_env()
         self.assertIsInstance(model, MockModel)
+        mock_load_dotenv.assert_called_once_with(override=False)
 
     def test_build_model_from_env_requires_model_name_for_real_provider(self) -> None:
         with patch("llm.client.load_dotenv"):
@@ -36,7 +37,7 @@ class LlmClientTests(unittest.TestCase):
             def __init__(self, **kwargs) -> None:
                 calls.append(kwargs)
 
-        with patch("llm.client.load_dotenv"):
+        with patch("llm.client.load_dotenv") as mock_load_dotenv:
             with patch("llm.client.OpenAIChatModel", FakeOpenAIChatModel):
                 with patch.dict(
                     os.environ,
@@ -51,6 +52,7 @@ class LlmClientTests(unittest.TestCase):
                     model = build_model_from_env()
 
         self.assertIsInstance(model, FakeOpenAIChatModel)
+        mock_load_dotenv.assert_called_once_with(override=False)
         self.assertEqual(calls[0]["model_name"], "gpt-4o-mini")
         self.assertEqual(calls[0]["api_key"], "k")
         self.assertEqual(calls[0]["stream"], False)
