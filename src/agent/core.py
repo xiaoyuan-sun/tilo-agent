@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import wraps
 import inspect
 import json
 from pathlib import Path
@@ -19,77 +20,56 @@ from runtime.session import SessionContext
 from skills.loader import load_enabled_skills
 
 
-def _wrap_project_scoped_file_tool(
-    fn: Callable[..., Any],
+def _with_project_path_sandbox(
+    fn: Callable[..., ToolResponse],
     project_root: Path,
     *,
     is_write_tool: bool,
-) -> Callable[..., ToolResponse | Any]:
-    signature = inspect.signature(fn)
-    accepts_kwargs = any(
-        parameter.kind == inspect.Parameter.VAR_KEYWORD
-        for parameter in signature.parameters.values()
-    )
-    accepts_overwrite = "overwrite" in signature.parameters or accepts_kwargs
+) -> Callable[..., ToolResponse]:
+    @wraps(fn)
+    def wrapped(*args: Any, **kwargs: Any) -> ToolResponse:
+        if not args:
+            raise ValueError("A text-file path argument is required.")
 
-    def _coerce_overwrite(value: Any) -> bool:
-        if isinstance(value, bool):
-            return value
-        if value is None:
-            return False
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"1", "true", "yes", "y", "on"}:
-                return True
-            if lowered in {"0", "false", "no", "n", "off", ""}:
-                return False
-            raise ValueError("overwrite must be a boolean value.")
-        if isinstance(value, (int, float)):
-            return bool(value)
-        raise ValueError("overwrite must be a boolean value.")
-
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        args_list = list(args)
-        path_key = None
-        raw_path = None
-
-        if args_list and isinstance(args_list[0], str):
-            raw_path = args_list[0]
-        else:
-            for candidate_key in ("path", "file_path", "filepath", "filename"):
-                if candidate_key in kwargs and isinstance(kwargs[candidate_key], str):
-                    path_key = candidate_key
-                    raw_path = kwargs[candidate_key]
-                    break
-
-        if raw_path is None:
-            raise ValueError("A text-file tool path argument is required.")
-
-        safe_path = str(resolve_project_path(project_root, raw_path))
-        if args_list and isinstance(args_list[0], str):
-            args_list[0] = safe_path
-        elif path_key is not None:
-            kwargs[path_key] = safe_path
+        path = str(args[0])
+        safe_path = str(resolve_project_path(project_root, path))
 
         if is_write_tool:
+            if len(args) < 2:
+                raise ValueError("write_text_file requires content.")
+            content = str(args[1])
             overwrite = _coerce_overwrite(kwargs.get("overwrite", False))
             ensure_writable(Path(safe_path), overwrite=overwrite)
-            if "overwrite" not in kwargs and accepts_overwrite:
-                kwargs["overwrite"] = False
+            return fn(safe_path, content, overwrite=overwrite)
 
-        return fn(*args_list, **kwargs)
+        return fn(safe_path)
 
-    wrapped.__name__ = fn.__name__
-    wrapped.__doc__ = fn.__doc__
     return wrapped
 
 
+def _coerce_overwrite(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "y", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "n", "off", ""}:
+            return False
+        raise ValueError("overwrite must be a boolean value.")
+    if isinstance(value, (int, float)):
+        return bool(value)
+    raise ValueError("overwrite must be a boolean value.")
+
 def _enable_builtin_file_tools(toolkit: Toolkit, project_root: Path) -> None:
-    wrapped_view = _wrap_project_scoped_file_tool(
-        view_text_file, project_root.resolve(), is_write_tool=False
+    scoped_root = project_root.resolve()
+    wrapped_view = _with_project_path_sandbox(
+        view_text_file, scoped_root, is_write_tool=False
     )
-    wrapped_write = _wrap_project_scoped_file_tool(
-        write_text_file, project_root.resolve(), is_write_tool=True
+    wrapped_write = _with_project_path_sandbox(
+        write_text_file, scoped_root, is_write_tool=True
     )
     toolkit.register_tool_function(wrapped_view)
     toolkit.register_tool_function(wrapped_write)
