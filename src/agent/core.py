@@ -23,15 +23,13 @@ from skills.loader import load_enabled_skills
 
 
 def _with_project_path_sandbox(
-    fn: Callable[..., Any],
+    fn: Callable[..., ToolResponse],
     project_root: Path,
     *,
     is_write_tool: bool,
-) -> Callable[..., Any]:
-    def _resolve_path_and_ranges(
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-    ) -> tuple[str, Any]:
+) -> Callable[..., ToolResponse]:
+    @wraps(fn)
+    def wrapped(*args: Any, **kwargs: Any) -> ToolResponse:
         if args:
             path = str(args[0])
         else:
@@ -42,31 +40,6 @@ def _with_project_path_sandbox(
         ranges = kwargs.get("ranges")
         if ranges is None and len(args) >= 2:
             ranges = args[1]
-        return safe_path, ranges
-
-    if inspect.iscoroutinefunction(fn):
-        @wraps(fn)
-        async def wrapped(*args: Any, **kwargs: Any) -> ToolResponse:
-            safe_path, ranges = _resolve_path_and_ranges(args, kwargs)
-
-            if is_write_tool:
-                if len(args) >= 2:
-                    content = str(args[1])
-                elif "content" in kwargs:
-                    content = str(kwargs["content"])
-                else:
-                    raise ValueError("write_text_file requires content.")
-                overwrite = _coerce_overwrite(kwargs.get("overwrite", False))
-                ensure_writable(Path(safe_path), overwrite=overwrite)
-                return await fn(safe_path, content, ranges=ranges)
-
-            return await fn(safe_path, ranges=ranges)
-
-        return wrapped
-
-    @wraps(fn)
-    def wrapped(*args: Any, **kwargs: Any) -> ToolResponse:
-        safe_path, ranges = _resolve_path_and_ranges(args, kwargs)
         if is_write_tool:
             if len(args) >= 2:
                 content = str(args[1])

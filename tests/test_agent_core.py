@@ -75,25 +75,6 @@ class AgentCoreTests(unittest.TestCase):
         self.assertEqual(captured["content"], "hello")
         self.assertEqual(captured["ranges"], [2, 3])
 
-    def test_with_project_path_sandbox_preserves_async_tool_behavior(self) -> None:
-        captured: dict[str, object] = {}
-
-        async def fake_read(
-            file_path: str, ranges: list[int] | None = None
-        ) -> dict[str, object]:
-            captured["file_path"] = file_path
-            captured["ranges"] = ranges
-            return {"ok": True}
-
-        wrapped = _with_project_path_sandbox(fake_read, Path("."), is_write_tool=False)
-
-        self.assertTrue(asyncio.iscoroutinefunction(wrapped))
-        result = asyncio.run(wrapped(file_path="README.md", ranges=[1, 2]))
-
-        self.assertEqual(result, {"ok": True})
-        self.assertTrue(str(captured["file_path"]).endswith("README.md"))
-        self.assertEqual(captured["ranges"], [1, 2])
-
     def test_history_entry_to_msg_converts_dict(self) -> None:
         msg = _history_entry_to_msg({"role": "user", "content": "hello"})
         self.assertIsInstance(msg, Msg)
