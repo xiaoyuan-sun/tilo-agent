@@ -16,6 +16,7 @@ from agent.prompt_builder import build_sys_prompt
 from agent.prompt_files import compose_prompt_context
 from llm.client import build_model_from_env
 from memory.jsonl_store import JsonlMemoryStore
+from mcp_support.registry import auto_register_mcp_clients
 from runtime.file_access import ensure_writable, resolve_project_path
 from runtime.session import SessionContext
 from skills.loader import load_enabled_skills
@@ -39,7 +40,6 @@ def _with_project_path_sandbox(
         ranges = kwargs.get("ranges")
         if ranges is None and len(args) >= 2:
             ranges = args[1]
-
         if is_write_tool:
             if len(args) >= 2:
                 content = str(args[1])
@@ -136,9 +136,14 @@ async def run_once(user_text: str, ctx: SessionContext) -> str:
     _, skill_dirs = load_enabled_skills(ctx.enabled_skills)
     toolkit = Toolkit()
     tool_lines = _enable_builtin_file_tools(toolkit, ctx.project_root)
+    mcp_manager = await auto_register_mcp_clients(toolkit)
     for skill_dir in skill_dirs:
         toolkit.register_agent_skill(str(skill_dir))
     tool_lines.append("(plus tool functions provided by registered AgentScope skills)")
+    if mcp_manager.client_names:
+        tool_lines.append(
+            f"(plus MCP tool functions provided by: {', '.join(mcp_manager.client_names)})"
+        )
     prompt_context = compose_prompt_context(ctx.workspace_dir())
     sys_prompt = build_sys_prompt(prompt_context, "\n".join(tool_lines))
     memory_store = JsonlMemoryStore(ctx.memory_dir)
@@ -157,12 +162,17 @@ async def run_once(user_text: str, ctx: SessionContext) -> str:
         max_iters=ctx.max_iters,
     )
     user_msg = Msg(name="user", content=user_text, role="user")
-    response = await agent(user_msg)
-    assistant_text = _normalize_response_text(response.content)
-    memory_store.append(ctx.session_id, {"role": "user", "content": user_text}, user_id=ctx.user_id)
-    memory_store.append(
-        ctx.session_id,
-        {"role": "assistant", "content": assistant_text},
-        user_id=ctx.user_id,
-    )
-    return assistant_text
+    try:
+        response = await agent(user_msg)
+        assistant_text = _normalize_response_text(response.content)
+        memory_store.append(
+            ctx.session_id, {"role": "user", "content": user_text}, user_id=ctx.user_id
+        )
+        memory_store.append(
+            ctx.session_id,
+            {"role": "assistant", "content": assistant_text},
+            user_id=ctx.user_id,
+        )
+        return assistant_text
+    finally:
+        await mcp_manager.close()
