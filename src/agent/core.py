@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from functools import wraps
 import inspect
 import json
-from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from agentscope.agent import ReActAgent
@@ -17,76 +15,18 @@ from agent.prompt_files import compose_prompt_context
 from llm.client import build_model_from_env
 from memory.jsonl_store import JsonlMemoryStore
 from mcp_support.registry import auto_register_mcp_clients
-from runtime.file_access import ensure_writable, resolve_project_path
 from runtime.session import SessionContext
 from skills.loader import load_enabled_skills
-
-
-def _with_project_path_sandbox(
-    fn: Callable[..., ToolResponse],
-    project_root: Path,
-    *,
-    is_write_tool: bool,
-) -> Callable[..., ToolResponse]:
-    @wraps(fn)
-    def wrapped(*args: Any, **kwargs: Any) -> ToolResponse:
-        if args:
-            path = str(args[0])
-        else:
-            path = str(kwargs.get("file_path", "")).strip()
-        if not path:
-            raise ValueError("A text-file path argument is required.")
-        safe_path = str(resolve_project_path(project_root, path))
-        ranges = kwargs.get("ranges")
-        if ranges is None and len(args) >= 2:
-            ranges = args[1]
-        if is_write_tool:
-            if len(args) >= 2:
-                content = str(args[1])
-            elif "content" in kwargs:
-                content = str(kwargs["content"])
-            else:
-                raise ValueError("write_text_file requires content.")
-            overwrite = _coerce_overwrite(kwargs.get("overwrite", False))
-            ensure_writable(Path(safe_path), overwrite=overwrite)
-            return fn(safe_path, content, ranges=ranges)
-
-        return fn(safe_path, ranges=ranges)
-
-    return wrapped
 
 
 def _tool_signature_text(fn: Callable[..., Any]) -> str:
     return f"{fn.__name__}{inspect.signature(fn)}"
 
 
-def _coerce_overwrite(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return False
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"1", "true", "yes", "y", "on"}:
-            return True
-        if lowered in {"0", "false", "no", "n", "off", ""}:
-            return False
-        raise ValueError("overwrite must be a boolean value.")
-    if isinstance(value, (int, float)):
-        return bool(value)
-    raise ValueError("overwrite must be a boolean value.")
-
-def _enable_builtin_file_tools(toolkit: Toolkit, project_root: Path) -> list[str]:
-    scoped_root = project_root.resolve()
-    wrapped_view = _with_project_path_sandbox(
-        view_text_file, scoped_root, is_write_tool=False
-    )
-    wrapped_write = _with_project_path_sandbox(
-        write_text_file, scoped_root, is_write_tool=True
-    )
-    toolkit.register_tool_function(wrapped_view)
-    toolkit.register_tool_function(wrapped_write)
-    return [_tool_signature_text(wrapped_view), _tool_signature_text(wrapped_write)]
+def _enable_builtin_file_tools(toolkit: Toolkit, _project_root: Any) -> list[str]:
+    toolkit.register_tool_function(view_text_file)
+    toolkit.register_tool_function(write_text_file)
+    return [_tool_signature_text(view_text_file), _tool_signature_text(write_text_file)]
 
 
 async def _append_memory_entry(memory: object, entry: Any) -> None:
