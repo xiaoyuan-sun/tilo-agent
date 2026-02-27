@@ -5,7 +5,6 @@ import re
 from typing import Any, Mapping, Protocol, Sequence, TypeAlias
 from uuid import uuid4
 
-from agentscope.model import OpenAIChatModel
 from dotenv import load_dotenv
 
 try:
@@ -13,6 +12,8 @@ try:
 except (ImportError, ModuleNotFoundError):
     ToolUseBlock: TypeAlias = dict[str, Any]
     TextBlock: TypeAlias = dict[str, Any]
+
+OpenAIChatModel = None
 
 
 PromptBlock = Mapping[str, Any]
@@ -88,6 +89,15 @@ def build_model_from_env() -> BaseModel:
     if not model_name:
         raise ValueError("AGENTSCOPE_MODEL_NAME is required when AGENTSCOPE_MODEL is set.")
     if provider == "openai":
+        global OpenAIChatModel
+        if OpenAIChatModel is None:
+            try:
+                from agentscope.model import OpenAIChatModel as _OpenAIChatModel
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    "Missing dependency 'agentscope'. Install project dependencies first: pip install -e ."
+                ) from exc
+            OpenAIChatModel = _OpenAIChatModel
         api_key = os.environ.get("AGENTSCOPE_API_KEY")
         base_url = os.environ.get("AGENTSCOPE_BASE_URL", "").strip()
         client_kwargs = {"base_url": base_url} if base_url else None
