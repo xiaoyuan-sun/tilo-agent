@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from runtime.file_access import ensure_writable, resolve_project_path
+from runtime.file_access import ensure_writable, resolve_project_path, resolve_user_workspace
 
 
 class TestResolveProjectPath:
@@ -48,3 +48,15 @@ class TestEnsureWritable:
         target = tmp_path / "new.txt"
         # Should not raise
         ensure_writable(target, overwrite=False)
+
+
+class TestResolveUserWorkspace:
+    def test_builds_isolated_path_per_user(self, tmp_path: Path) -> None:
+        base = tmp_path / "workspaces"
+        alice = resolve_user_workspace(base, "alice")
+        bob = resolve_user_workspace(base, "bob")
+        assert alice == (base / "alice").resolve()
+        assert bob == (base / "bob").resolve()
+        assert alice != bob
+        assert alice.exists()
+        assert bob.exists()

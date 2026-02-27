@@ -29,6 +29,39 @@ Use for demo only.
     )
     return tmp_path
 
+    def test_load_enabled_skills_defaults_to_all_skills_when_unspecified(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            first = base / "first_skill"
+            second = base / "second_skill"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            (first / "SKILL.md").write_text(
+                """---
+name: first_skill
+description: First skill.
+---""",
+                encoding="utf-8",
+            )
+            (second / "SKILL.md").write_text(
+                """---
+name: second_skill
+description: Second skill.
+---""",
+                encoding="utf-8",
+            )
+
+            original = loader.SKILLS_DIR
+            loader.SKILLS_DIR = base
+            try:
+                summary, skill_dirs = loader.load_enabled_skills()
+            finally:
+                loader.SKILLS_DIR = original
+
+            self.assertIn("first_skill", summary)
+            self.assertIn("second_skill", summary)
+            self.assertEqual(skill_dirs, [first, second])
+
 
 class TestScanBuiltinSkills:
     def test_returns_dirs_with_skill_md(self, monkeypatch, mock_skills_dir: Path) -> None:
