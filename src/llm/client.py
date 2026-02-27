@@ -9,8 +9,8 @@ from agentscope.model import OpenAIChatModel
 from dotenv import load_dotenv
 
 try:
-    from agentscope.message.block import ToolUseBlock, TextBlock
-except ModuleNotFoundError:
+    from agentscope.message import ToolUseBlock, TextBlock
+except (ImportError, ModuleNotFoundError):
     ToolUseBlock: TypeAlias = dict[str, Any]
     TextBlock: TypeAlias = dict[str, Any]
 
