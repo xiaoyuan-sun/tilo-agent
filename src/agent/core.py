@@ -29,21 +29,29 @@ def _with_project_path_sandbox(
 ) -> Callable[..., ToolResponse]:
     @wraps(fn)
     def wrapped(*args: Any, **kwargs: Any) -> ToolResponse:
-        if not args:
+        if args:
+            path = str(args[0])
+        else:
+            path = str(kwargs.get("file_path", "")).strip()
+        if not path:
             raise ValueError("A text-file path argument is required.")
-
-        path = str(args[0])
         safe_path = str(resolve_project_path(project_root, path))
+        ranges = kwargs.get("ranges")
+        if ranges is None and len(args) >= 2:
+            ranges = args[1]
 
         if is_write_tool:
-            if len(args) < 2:
+            if len(args) >= 2:
+                content = str(args[1])
+            elif "content" in kwargs:
+                content = str(kwargs["content"])
+            else:
                 raise ValueError("write_text_file requires content.")
-            content = str(args[1])
             overwrite = _coerce_overwrite(kwargs.get("overwrite", False))
             ensure_writable(Path(safe_path), overwrite=overwrite)
-            return fn(safe_path, content, overwrite=overwrite)
+            return fn(safe_path, content, ranges=ranges)
 
-        return fn(safe_path)
+        return fn(safe_path, ranges=ranges)
 
     return wrapped
 
