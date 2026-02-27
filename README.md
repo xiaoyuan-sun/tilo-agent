@@ -35,6 +35,22 @@ Set `enabled_skills=[...]` only when you want to limit the available skills.
 ## Environment
 Fill `.env.example` to configure real models later. The mock model works without any keys, so you can safely run `run_once` immediately.
 
+### MCP auto registration
+- Set `AGENTSCOPE_MCP_SERVERS` to a JSON array, then MCP clients will be auto-registered into AgentScope `Toolkit` on every `run_once(...)`.
+- Supported client types:
+  - `stdio_stateful`: requires `name`, `type`, `command`, optional `args`, `env`, `cwd`
+  - `http_stateful`: requires `name`, `type`, `transport`, `url`, optional `headers`
+  - `http_stateless`: requires `name`, `type`, `transport`, `url`, optional `headers`
+- Optional registration fields: `group_name`, `enable_funcs`, `disable_funcs`, `preset_kwargs_mapping`, `namesake_strategy`
+
+Example:
+```bash
+export AGENTSCOPE_MCP_SERVERS='[
+  {"name":"fs","type":"stdio_stateful","command":"uvx","args":["mcp-server-filesystem","."]},
+  {"name":"maps","type":"http_stateless","transport":"streamable_http","url":"https://example.com/mcp"}
+]'
+```
+
 ### Real model mode
 - Set `AGENTSCOPE_MODEL=openai`.
 - Set `AGENTSCOPE_MODEL_NAME` (for example `qwen-plus` on DashScope OpenAI proxy, or your OpenAI model id).
