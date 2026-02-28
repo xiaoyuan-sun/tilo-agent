@@ -72,26 +72,40 @@ def _normalize_response_text(content: Any) -> str:
     return str(content)
 
 
-async def run_once(user_text: str, ctx: SessionContext) -> str:
+def _build_agent_components(
+    ctx: SessionContext,
+) -> tuple[Toolkit, str, InMemoryMemory, Any]:
+    """Build the core agent components: toolkit, system prompt, memory, and model.
+
+    This function extracts the synchronous component-building logic from run_once
+    to enable reuse in streaming contexts.
+
+    Args:
+        ctx: The session context containing configuration.
+
+    Returns:
+        A tuple of (toolkit, sys_prompt, memory, model).
+    """
     _, skill_dirs = load_enabled_skills(ctx.enabled_skills)
     toolkit = Toolkit()
     tool_lines = _enable_builtin_file_tools(toolkit, ctx.project_root)
-    mcp_manager = await auto_register_mcp_clients(toolkit)
     for skill_dir in skill_dirs:
         toolkit.register_agent_skill(str(skill_dir))
     tool_lines.append("(plus tool functions provided by registered AgentScope skills)")
-    if mcp_manager.client_names:
-        tool_lines.append(
-            f"(plus MCP tool functions provided by: {', '.join(mcp_manager.client_names)})"
-        )
     prompt_context = compose_prompt_context(ctx.workspace_dir())
     sys_prompt = build_sys_prompt(prompt_context, "\n".join(tool_lines))
+    memory = InMemoryMemory()
+    model = build_model_from_env()
+    return toolkit, sys_prompt, memory, model
+
+
+async def run_once(user_text: str, ctx: SessionContext) -> str:
+    toolkit, sys_prompt, memory, model = _build_agent_components(ctx)
+    mcp_manager = await auto_register_mcp_clients(toolkit)
     memory_store = JsonlMemoryStore(ctx.memory_dir)
     history = memory_store.load(ctx.session_id, user_id=ctx.user_id)
-    memory = InMemoryMemory()
     for entry in history:
         await _append_memory_entry(memory, _history_entry_to_msg(entry))
-    model = build_model_from_env()
     agent = ReActAgent(
         name="Tilo",
         sys_prompt=sys_prompt,
