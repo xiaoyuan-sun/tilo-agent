@@ -72,5 +72,47 @@ class CliEntryTests(unittest.TestCase):
         self.assertEqual(ctx.enabled_skills, ["time_skill", "math_skill"])
 
 
+# tests/test_cli_entry.py - 追加测试
+
+from typing import AsyncGenerator
+from agent.stream import StreamEvent
+from runtime.session import SessionContext
+
+
+def test_chat_loop_stream_calls_output_fn() -> None:
+    outputs: list[str] = []
+    ctx = SessionContext(session_id="test-stream-cli", enabled_skills=["time_skill"])
+
+    inputs = iter(["hello", "quit"])
+
+    async def fake_chat_stream(
+        user_text: str, _ctx: SessionContext
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Mock chat_stream that yields test events"""
+        yield StreamEvent("thinking", "")
+        yield StreamEvent("text", f"echo:{user_text}")
+        yield StreamEvent("done", "")
+
+    async def run_test() -> None:
+        from runtime.cli import chat_loop_stream
+        with patch("agent.core.chat_stream", side_effect=fake_chat_stream):
+            await chat_loop_stream(
+                ctx,
+                input_fn=lambda _: next(inputs),
+                output_fn=outputs.append,
+            )
+
+    asyncio.run(run_test())
+
+    # 应该有 session 信息输出
+    assert any("Session" in o for o in outputs)
+    # 应该有 thinking 输出
+    assert any("Tilo 正在思考" in o for o in outputs)
+    # 应该有 text 输出
+    assert any("echo:hello" in o for o in outputs)
+    # 应该有 "Bye." 输出
+    assert any("Bye" in o for o in outputs)
+
+
 if __name__ == "__main__":
     unittest.main()
