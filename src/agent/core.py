@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
-from typing import Any, Callable, Mapping
+from typing import Any, AsyncGenerator, Callable, Mapping
 
 from agentscope.agent import ReActAgent
 from agentscope.formatter import OpenAIChatFormatter
@@ -12,6 +13,7 @@ from agentscope.tool import ToolResponse, Toolkit, view_text_file, write_text_fi
 
 from agent.prompt_builder import build_sys_prompt
 from agent.prompt_files import compose_prompt_context
+from agent.stream import StreamEvent, StreamingHook
 from llm.client import build_model_from_env
 from memory.jsonl_store import JsonlMemoryStore
 from mcp_support.registry import auto_register_mcp_clients
@@ -130,3 +132,79 @@ async def run_once(user_text: str, ctx: SessionContext) -> str:
         return assistant_text
     finally:
         await mcp_manager.close()
+
+
+async def chat_stream(
+    user_text: str,
+    ctx: SessionContext,
+) -> AsyncGenerator[StreamEvent, None]:
+    """流式对话接口
+
+    Args:
+        user_text: 用户输入
+        ctx: 会话上下文
+
+    Yields:
+        StreamEvent: 流式事件（thinking, tool_call, text, done）
+    """
+    queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
+    hook = StreamingHook(queue)
+
+    toolkit, sys_prompt, memory, model = _build_agent_components(ctx)
+    mcp_manager = await auto_register_mcp_clients(toolkit)
+
+    agent = ReActAgent(
+        name="Tilo",
+        sys_prompt=sys_prompt,
+        model=model,
+        formatter=OpenAIChatFormatter(),
+        toolkit=toolkit,
+        memory=memory,
+        max_iters=ctx.max_iters,
+    )
+
+    # 注册 hooks
+    agent.register_instance_hook("pre_reasoning", "stream", hook.pre_reasoning)
+    agent.register_instance_hook("pre_acting", "stream", hook.pre_acting)
+
+    # 加载历史记忆
+    memory_store = JsonlMemoryStore(ctx.memory_dir)
+    history = memory_store.load(ctx.session_id, user_id=ctx.user_id)
+    for entry in history:
+        await _append_memory_entry(memory, _history_entry_to_msg(entry))
+
+    # 在后台任务中运行 agent
+    async def run_agent() -> None:
+        try:
+            user_msg = Msg(name="user", content=user_text, role="user")
+            response = await agent(user_msg)
+            text = _normalize_response_text(response.content)
+            if text:
+                await queue.put(StreamEvent("text", text))
+
+            # 保存对话历史
+            memory_store.append(
+                ctx.session_id,
+                {"role": "user", "content": user_text},
+                user_id=ctx.user_id,
+            )
+            memory_store.append(
+                ctx.session_id,
+                {"role": "assistant", "content": text},
+                user_id=ctx.user_id,
+            )
+        finally:
+            await queue.put(None)
+            await mcp_manager.close()
+
+    task = asyncio.create_task(run_agent())
+
+    # 消费队列，yield 事件
+    while True:
+        event = await queue.get()
+        if event is None:
+            break
+        yield event
+
+    yield StreamEvent("done", "")
+    await task  # 确保异常被传播
