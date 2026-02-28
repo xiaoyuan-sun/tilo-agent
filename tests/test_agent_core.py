@@ -8,13 +8,17 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
+from agentscope.tool import Toolkit
 
 from agent.core import (
     _append_memory_entry,
+    _build_agent_components,
     _history_entry_to_msg,
     _normalize_response_text,
 )
+from runtime.session import SessionContext
 
 
 class _AsyncAddMemory:
@@ -51,6 +55,16 @@ class AgentCoreTests(unittest.TestCase):
     def test_normalize_response_text_falls_back_to_json(self) -> None:
         content = [{"type": "tool_use", "name": "time.now", "input": {}}]
         self.assertEqual(_normalize_response_text(content), json.dumps(content, ensure_ascii=False))
+
+
+class BuildAgentComponentsTests(unittest.TestCase):
+    def test_build_agent_components_returns_tuple(self) -> None:
+        ctx = SessionContext(session_id="test", enabled_skills=["time_skill"])
+        toolkit, sys_prompt, memory, model = _build_agent_components(ctx)
+        self.assertIsNotNone(toolkit)
+        self.assertIsInstance(sys_prompt, str)
+        self.assertIsNotNone(memory)
+        self.assertIsNotNone(model)
 
 
 if __name__ == "__main__":

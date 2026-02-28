@@ -59,6 +59,42 @@ async def chat_loop(
         output_fn(f"Tilo> {reply}")
 
 
+async def chat_loop_stream(
+    ctx: SessionContext,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> None:
+    """流式 CLI 交互"""
+    from agent.core import chat_stream
+
+    output_fn(
+        f"Session: {ctx.session_id} | skills={','.join(ctx.enabled_skills)} | type quit to exit"
+    )
+
+    while True:
+        try:
+            user_text = input_fn("You> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            output_fn("\nBye.")
+            return
+
+        if not user_text:
+            continue
+        if user_text.lower() in {"quit", "exit"}:
+            output_fn("Bye.")
+            return
+
+        # 流式输出
+        async for event in chat_stream(user_text, ctx):
+            if event.type == "thinking":
+                output_fn("[Tilo 正在思考...]")
+            elif event.type == "tool_call":
+                output_fn(f"[Tilo 正在调用工具: {event.data}]")
+            elif event.type == "text":
+                output_fn(f"Tilo> {event.data}")
+            # done 事件无需特殊处理
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Start interactive Tilo chat.")
     parser.add_argument("--session-id", default=None, help="Reuse an existing session id.")
